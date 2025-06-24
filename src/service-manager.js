@@ -1,10 +1,10 @@
 // service-manager.js
 // Service management and monitoring for Karere backend
 
-import { log, errorHandler, health } from './logger.js';
-import cron from 'node-cron';
-import fs from 'fs/promises';
-import path from 'path';
+const { log, errorHandler, health } = require('./logger.js');
+const cron = require('node-cron');
+const fs = require('fs').promises;
+const path = require('path');
 
 class ServiceManager {
     constructor() {
@@ -317,4 +317,4 @@ class ServiceManager {
 // Create singleton instance
 const serviceManager = new ServiceManager();
 
-export default serviceManager;
+module.exports = serviceManager;

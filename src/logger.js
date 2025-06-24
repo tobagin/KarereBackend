@@ -1,9 +1,9 @@
 // logger.js
 // Comprehensive logging system for Karere backend
 
-import winston from 'winston';
-import fs from 'fs';
-import path from 'path';
+const winston = require('winston');
+const fs = require('fs');
+const path = require('path');
 
 // Create logs directory if it doesn't exist
 const logsDir = 'logs';
@@ -85,7 +85,7 @@ const logger = winston.createLogger({
 });
 
 // Enhanced logging methods with context
-export const log = {
+const log = {
     info: (message, meta = {}) => logger.info(message, meta),
     warn: (message, meta = {}) => logger.warn(message, meta),
     error: (message, error = null, meta = {}) => {
@@ -104,6 +104,7 @@ export const log = {
     baileys: (message, meta = {}) => logger.info(message, { ...meta, component: 'baileys' }),
     auth: (message, meta = {}) => logger.info(message, { ...meta, component: 'auth' }),
     message: (message, meta = {}) => logger.info(message, { ...meta, component: 'messaging' }),
+    database: (message, meta = {}) => logger.info(message, { ...meta, component: 'database' }),
     
     // Performance logging
     performance: (operation, duration, meta = {}) => {
@@ -117,7 +118,7 @@ export const log = {
 };
 
 // Error handling utilities
-export const errorHandler = {
+const errorHandler = {
     // Handle and log WebSocket errors
     websocket: (error, context = '') => {
         log.error(`WebSocket error${context ? ` in ${context}` : ''}`, error, { type: 'websocket' });
@@ -180,7 +181,7 @@ export const errorHandler = {
 };
 
 // Performance monitoring utilities
-export const performance = {
+const performance = {
     start: (operation) => {
         const startTime = Date.now();
         return {
@@ -194,7 +195,7 @@ export const performance = {
 };
 
 // Health check utilities
-export const health = {
+const health = {
     logSystemInfo: () => {
         log.info('System Information', {
             nodeVersion: process.version,
@@ -221,4 +222,10 @@ export const health = {
     }
 };
 
-export default logger;
+module.exports = {
+    log,
+    errorHandler,
+    performance,
+    health,
+    logger
+};

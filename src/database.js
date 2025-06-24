@@ -1,10 +1,10 @@
 // database.js
 // SQLite database for message persistence and chat history
 
-import sqlite3 from 'sqlite3';
-import { log, errorHandler, performance } from './logger.js';
-import fs from 'fs';
-import path from 'path';
+const sqlite3 = require('sqlite3');
+const { log, errorHandler, performance } = require('./logger.js');
+const fs = require('fs');
+const path = require('path');
 
 // Create data directory if it doesn't exist
 const dataDir = 'data';
@@ -926,4 +926,4 @@ class Database {
 // Create singleton instance
 const database = new Database();
 
-export default database;
+module.exports = database;

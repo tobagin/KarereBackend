@@ -1,17 +1,29 @@
+#!/usr/bin/env node
 // backend.js
 // Enhanced Karere backend with comprehensive error handling, logging, and persistence
 
-import { Boom } from '@hapi/boom';
-import baileys from '@whiskeysockets/baileys';
-import P from 'pino'
-import { WebSocketServer } from 'ws';
-import qrcode from 'qrcode';
-import fs from 'fs/promises';
+const { Boom } = require('@hapi/boom');
+const baileys = require('@whiskeysockets/baileys');
+const P = require('pino');
+const { WebSocketServer } = require('ws');
+const qrcode = require('qrcode');
+const fs = require('fs').promises;
 
 // Import enhanced modules
-import { log, errorHandler, performance } from './logger.js';
-import database from './database.js';
-import serviceManager from './service-manager.js';
+const { log, errorHandler, performance } = require('./logger.js');
+// Use SEA-compatible database - check if we're in a bundled environment
+let database;
+try {
+    // Try to require sqlite3 to see if we're in a normal Node.js environment
+    require('sqlite3');
+    database = require('./database.js');
+    log.info('Using SQLite database');
+} catch (error) {
+    // If sqlite3 is not available, we're likely in SEA, use file-based database
+    database = require('./database-sea.js');
+    log.info('Using file-based database (SEA mode)');
+}
+const serviceManager = require('./service-manager.js');
 
 const makeWASocket = baileys.default;
 const {
