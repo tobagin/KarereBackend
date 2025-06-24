@@ -9,6 +9,11 @@ dist/
 karere-backend*
 !karere-backend/
 
+# SEA build artifacts
+sea-prep.blob
+sea-config.json
+node-v*-linux-*/
+
 # Runtime data
 *.db
 *.log

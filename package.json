@@ -1,29 +1,14 @@
 {
   "name": "karere-backend",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "WhatsApp backend for Karere using Baileys",
   "main": "src/backend.js",
-  "type": "module",
   "bin": "src/backend.js",
-  "pkg": {
-    "scripts": [
-      "src/**/*.js"
-    ],
-    "assets": [],
-    "targets": [
-      "node18-linux-x64",
-      "node18-linux-arm64",
-      "node18-win-x64",
-      "node18-macos-x64",
-      "node18-macos-arm64"
-    ],
-    "outputPath": "dist"
-  },
   "scripts": {
-    "build": "pkg . --out-path dist",
-    "build:linux": "pkg . --targets node18-linux-x64,node18-linux-arm64 --out-path dist",
-    "build:windows": "pkg . --targets node18-win-x64 --out-path dist",
-    "build:macos": "pkg . --targets node18-macos-x64,node18-macos-arm64 --out-path dist",
+    "bundle": "node bundle-for-sea.js",
+    "build": "npm run bundle && node build-sea.js",
+    "build:arm64": "npm run bundle && node build-sea.js arm64",
+    "build:x64": "npm run bundle && node build-sea.js x64",
     "start": "node src/backend.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -36,13 +21,24 @@
   "author": "Karere Team",
   "license": "MIT",
   "dependencies": {
+    "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.18",
+    "jimp": "^0.16.13",
+    "link-preview-js": "^3.1.0",
+    "node-cron": "^4.1.1",
     "pino": "^9.7.0",
     "qrcode": "^1.5.4",
+    "sharp": "^0.32.6",
     "sqlite3": "^5.1.6",
+    "winston": "^3.17.0",
     "ws": "^8.18.2"
   },
   "devDependencies": {
-    "pkg": "^5.8.1"
+    "esbuild": "^0.25.5",
+    "postject": "^1.0.0-alpha.6"
+  },
+  "sea": {
+    "main": "src/backend.js",
+    "disableExperimentalSEAWarning": true
   }
 }
