@@ -1,158 +1,153 @@
-name: Build and Release Bundled Backend
+name: Create Vendored Dependencies Release
 
 on:
   push:
     tags:
-      - 'v*'
-
-permissions:
-  contents: write
+      - 'v*'  # Triggers on version tags like v0.2.3, v1.0.0, etc.
 
 jobs:
-  build-bundled-releases:
+  create-vendor-archive:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        arch: [x64, arm64]
-
+    
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v4
-
-    - name: Set up variables
-      id: vars
-      run: |
-        echo "NODE_VERSION=24.2.0" >> $GITHUB_OUTPUT
-        echo "ARCH=${{ matrix.arch }}" >> $GITHUB_OUTPUT
-        if [ "${{ matrix.arch }}" = "x64" ]; then
-          echo "NODE_ARCH=x64" >> $GITHUB_OUTPUT
-          echo "LINUX_ARCH=linux-x64" >> $GITHUB_OUTPUT
-        else
-          echo "NODE_ARCH=arm64" >> $GITHUB_OUTPUT
-          echo "LINUX_ARCH=linux-arm64" >> $GITHUB_OUTPUT
-        fi
-        
-    - name: Set up Node.js for dependency installation
+      
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '24.2.0'
-
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Clean previous builds
+      run: |
+        rm -rf node_modules package-lock.json
+        
     - name: Install dependencies
       run: |
-        echo "Installing backend dependencies..."
-        node --version
-        npm --version
-        npm install --production --no-optional
-        echo "Dependencies installed successfully"
-
-    - name: Download target Node.js ${{ steps.vars.outputs.NODE_VERSION }}
+        npm install --production
+        
+    - name: Create vendored dependencies archive
       run: |
-        echo "Downloading Node.js for target architecture: ${{ steps.vars.outputs.LINUX_ARCH }}"
-        wget https://nodejs.org/dist/v${{ steps.vars.outputs.NODE_VERSION }}/node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }}.tar.xz
-        tar -xf node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }}.tar.xz
-        mv node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }} nodejs-target
-        echo "Target Node.js extracted to nodejs-target/"
+        # Get the tag name
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        ARCHIVE_NAME="karere-backend-node-modules-${TAG_NAME}.tar.gz"
         
-    - name: Create bundle directory
+        echo "Creating vendored archive for ${TAG_NAME}"
+        
+        # Create the archive with node_modules and package-lock.json
+        tar -czf "${ARCHIVE_NAME}" node_modules/ package-lock.json
+        
+        # Get file info
+        FILE_SIZE=$(stat -c%s "${ARCHIVE_NAME}")
+        SHA256=$(sha256sum "${ARCHIVE_NAME}" | cut -d' ' -f1)
+        
+        echo "Archive created: ${ARCHIVE_NAME}"
+        echo "Size: ${FILE_SIZE} bytes"
+        echo "SHA256: ${SHA256}"
+        
+        # Save info for later steps
+        echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_ENV
+        echo "FILE_SIZE=${FILE_SIZE}" >> $GITHUB_ENV
+        echo "SHA256=${SHA256}" >> $GITHUB_ENV
+        echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+        
+    - name: Generate Flatpak manifest snippet
       run: |
-        echo "Creating bundle directory..."
-        mkdir -p karere-backend-bundle-${{ matrix.arch }}
-        cp -r nodejs-target karere-backend-bundle-${{ matrix.arch }}/nodejs
-        cp -r src karere-backend-bundle-${{ matrix.arch }}/
-        cp -r node_modules karere-backend-bundle-${{ matrix.arch }}/
-        cp package.json karere-backend-bundle-${{ matrix.arch }}/
-        cp package-lock.json karere-backend-bundle-${{ matrix.arch }}/
-        echo "Bundle directory created"
-        
-    - name: Create startup script
-      run: |
-        echo "Creating startup script..."
-        cat > karere-backend-bundle-${{ matrix.arch }}/start-backend.sh << 'EOF'
-        #!/bin/bash
-        # Karere Backend Startup Script
-        
-        # Get the directory where this script is located
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        
-        # Set up Node.js path
-        export PATH="$SCRIPT_DIR/nodejs/bin:$PATH"
-        
-        # Set up working directory
-        cd "$SCRIPT_DIR"
-        
-        # Start the backend
-        exec node src/backend.js "$@"
+        cat > flatpak-manifest-snippet.json << EOF
+        {
+          "type": "archive",
+          "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${ARCHIVE_NAME}",
+          "sha256": "${SHA256}",
+          "dest": "KarereBackend"
+        }
         EOF
-        chmod +x karere-backend-bundle-${{ matrix.arch }}/start-backend.sh
-        echo "Startup script created"
         
-    - name: Create README
+        echo "Generated Flatpak manifest snippet:"
+        cat flatpak-manifest-snippet.json
+        
+    - name: Create Release Notes
       run: |
-        echo "Creating README..."
-        cat > karere-backend-bundle-${{ matrix.arch }}/README.md << 'EOF'
-        # Karere Backend Bundle
+        cat > release-notes.md << EOF
+        # Karere Backend ${TAG_NAME} - Vendored Dependencies
         
-        This bundle contains everything needed to run the Karere backend:
-        - Node.js 24.2.0
-        - Karere backend source code  
-        - All required dependencies
+        This release contains the vendored Node.js dependencies for Karere Backend ${TAG_NAME}.
         
-        ## Usage
+        ## 📦 Archive Details
+        - **File**: \`${ARCHIVE_NAME}\`
+        - **Size**: ${FILE_SIZE} bytes ($(echo "scale=2; ${FILE_SIZE}/1024/1024" | bc) MB)
+        - **SHA256**: \`${SHA256}\`
         
-        ```bash
-        # Make the startup script executable (if needed)
-        chmod +x start-backend.sh
+        ## 🚀 Usage in Flatpak
         
-        # Run the backend
-        ./start-backend.sh
-        ```
+        Add this to your Flatpak manifest sources array:
         
-        The backend will start on port 8765 by default.
+        \`\`\`json
+        $(cat flatpak-manifest-snippet.json)
+        \`\`\`
         
-        ## Architecture
+        ## 📋 What's Included
+        - All production Node.js dependencies from package.json
+        - package-lock.json for reproducible builds
+        - Ready for offline npm operations in Flatpak builds
         
-        This bundle is built for: ${{ matrix.arch }}
+        ## 🔧 Dependencies Included
+        $(npm list --production --depth=0 2>/dev/null | grep -E '^[├└]' | sed 's/^[├└]── /- /' || echo "- See package.json for full dependency list")
+        
+        ---
+        
+        This archive follows the Flathub-approved vendoring approach for Node.js dependencies.
         EOF
-        echo "README created"
         
-    - name: Create zip archive
-      run: |
-        echo "Creating zip archive..."
-        zip -r karere-backend-bundle-${{ matrix.arch }}.zip karere-backend-bundle-${{ matrix.arch }}/
-        ls -lh karere-backend-bundle-${{ matrix.arch }}.zip
-        echo "Zip archive created"
-        
-    - name: Calculate checksums
-      run: |
-        echo "Calculating checksums..."
-        sha256sum karere-backend-bundle-${{ matrix.arch }}.zip > karere-backend-bundle-${{ matrix.arch }}.zip.sha256
-        echo "Checksum for ${{ matrix.arch }}:"
-        cat karere-backend-bundle-${{ matrix.arch }}.zip.sha256
-        
-    - name: Upload Release Assets
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          karere-backend-bundle-${{ matrix.arch }}.zip
-          karere-backend-bundle-${{ matrix.arch }}.zip.sha256
-        body: |
-          ## Karere Backend Release
-          
-          This release includes bundled packages for multiple architectures:
-          - Linux x64 (Intel/AMD 64-bit)
-          - Linux ARM64 (ARM 64-bit)
-          
-          Each bundle contains:
-          - Node.js 24.2.0 runtime
-          - Karere backend source code
-          - All required dependencies
-          
-          Download the appropriate bundle for your system and run:
-          ```bash
-          unzip karere-backend-bundle-*.zip
-          cd karere-backend-bundle-*/
-          ./start-backend.sh
-          ```
+          ${{ env.ARCHIVE_NAME }}
+          flatpak-manifest-snippet.json
+        body_path: release-notes.md
+        draft: false
+        prerelease: false
+        tag_name: ${{ env.TAG_NAME }}
+        name: "Karere Backend ${{ env.TAG_NAME }} - Vendored Dependencies"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Get commit hash
+      run: |
+        COMMIT_HASH=$(git rev-parse HEAD)
+        echo "COMMIT_HASH=${COMMIT_HASH}" >> $GITHUB_ENV
+
+    - name: Trigger frontend update (optional)
+      if: github.repository == 'tobagin/KarereBackend'
+      run: |
+        # Trigger the frontend repository to update its manifest
+        # This requires a personal access token with repo scope
+        curl -X POST \
+          -H "Accept: application/vnd.github.v3+json" \
+          -H "Authorization: token ${{ secrets.FRONTEND_UPDATE_TOKEN }}" \
+          https://api.github.com/repos/tobagin/Karere/dispatches \
+          -d "{
+            \"event_type\": \"backend-release\",
+            \"client_payload\": {
+              \"version\": \"${TAG_NAME}\",
+              \"sha256\": \"${SHA256}\",
+              \"commit\": \"${COMMIT_HASH}\"
+            }
+          }" || echo "Frontend update trigger failed (token may not be configured)"
+
+    - name: Output summary
+      run: |
+        echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Archive**: \`${ARCHIVE_NAME}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Size**: ${FILE_SIZE} bytes" >> $GITHUB_STEP_SUMMARY
+        echo "**SHA256**: \`${SHA256}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit**: \`${COMMIT_HASH}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📋 Next Steps:" >> $GITHUB_STEP_SUMMARY
+        echo "1. The Flatpak manifest should be automatically updated via PR" >> $GITHUB_STEP_SUMMARY
+        echo "2. Review and merge the auto-generated PR in the frontend repo" >> $GITHUB_STEP_SUMMARY
+        echo "3. Test the build with: \`flatpak-builder --force-clean builddir manifest.yml\`" >> $GITHUB_STEP_SUMMARY
+        echo "4. The vendored dependencies are available at:" >> $GITHUB_STEP_SUMMARY
+        echo "   https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${ARCHIVE_NAME}" >> $GITHUB_STEP_SUMMARY
