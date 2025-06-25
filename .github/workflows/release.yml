@@ -8,15 +8,15 @@ on:
 jobs:
   build-bundled-releases:
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         arch: [x64, arm64]
-        
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up variables
       id: vars
       run: |
@@ -26,32 +26,36 @@ jobs:
           echo "NODE_ARCH=x64" >> $GITHUB_OUTPUT
           echo "LINUX_ARCH=linux-x64" >> $GITHUB_OUTPUT
         else
-          echo "NODE_ARCH=arm64" >> $GITHUB_OUTPUT  
+          echo "NODE_ARCH=arm64" >> $GITHUB_OUTPUT
           echo "LINUX_ARCH=linux-arm64" >> $GITHUB_OUTPUT
         fi
         
-    - name: Download Node.js ${{ steps.vars.outputs.NODE_VERSION }}
-      run: |
-        echo "Downloading Node.js for ${{ steps.vars.outputs.LINUX_ARCH }}"
-        wget https://nodejs.org/dist/v${{ steps.vars.outputs.NODE_VERSION }}/node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }}.tar.xz
-        tar -xf node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }}.tar.xz
-        mv node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }} nodejs
-        echo "Node.js extracted to nodejs/"
-        
+    - name: Set up Node.js for dependency installation
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24.2.0'
+
     - name: Install dependencies
       run: |
         echo "Installing backend dependencies..."
-        export PATH="$PWD/nodejs/bin:$PATH"
         node --version
         npm --version
         npm install --production --no-optional
         echo "Dependencies installed successfully"
+
+    - name: Download target Node.js ${{ steps.vars.outputs.NODE_VERSION }}
+      run: |
+        echo "Downloading Node.js for target architecture: ${{ steps.vars.outputs.LINUX_ARCH }}"
+        wget https://nodejs.org/dist/v${{ steps.vars.outputs.NODE_VERSION }}/node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }}.tar.xz
+        tar -xf node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }}.tar.xz
+        mv node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }} nodejs-target
+        echo "Target Node.js extracted to nodejs-target/"
         
     - name: Create bundle directory
       run: |
         echo "Creating bundle directory..."
         mkdir -p karere-backend-bundle-${{ matrix.arch }}
-        cp -r nodejs karere-backend-bundle-${{ matrix.arch }}/
+        cp -r nodejs-target karere-backend-bundle-${{ matrix.arch }}/nodejs
         cp -r src karere-backend-bundle-${{ matrix.arch }}/
         cp -r node_modules karere-backend-bundle-${{ matrix.arch }}/
         cp package.json karere-backend-bundle-${{ matrix.arch }}/
