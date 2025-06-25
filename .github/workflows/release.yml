@@ -1,102 +1,151 @@
-name: Build and Release
+name: Build and Release Bundled Backend
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  packages: write
 
 jobs:
-  build:
-    # Build only when new version tags are pushed
+  build-bundled-releases:
+    runs-on: ubuntu-latest
+    
     strategy:
       matrix:
-        include:
-          # Linux x64 build
-          - os: ubuntu-latest
-            arch: x64
-            node-version: '22'
-            build-script: 'build:x64'
-          # Linux ARM64 build
-          - os: ubuntu-latest
-            arch: arm64
-            node-version: '22'
-            build-script: 'build:arm64'
-
-    runs-on: ${{ matrix.os }}
-
+        arch: [x64, arm64]
+        
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Bundle application
-      run: npm run bundle
-
-    - name: Build SEA executable
-      run: npm run ${{ matrix.build-script }}
-
-    - name: List dist directory (debug)
-      run: ls -la dist/
-      shell: bash
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: karere-backend-linux-${{ matrix.arch }}
-        path: dist/karere-backend-linux-${{ matrix.arch }}*
-        retention-days: 30
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts/
-
-    - name: List artifacts (debug)
-      run: find artifacts/ -type f -name "*" | head -20
-
-    - name: Prepare release files
+      
+    - name: Set up variables
+      id: vars
       run: |
-        mkdir -p release/
-        find artifacts/ -name "karere-backend-*" -type f -exec cp {} release/ \;
-        ls -la release/
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
+        echo "NODE_VERSION=24.2.0" >> $GITHUB_OUTPUT
+        echo "ARCH=${{ matrix.arch }}" >> $GITHUB_OUTPUT
+        if [ "${{ matrix.arch }}" = "x64" ]; then
+          echo "NODE_ARCH=x64" >> $GITHUB_OUTPUT
+          echo "LINUX_ARCH=linux-x64" >> $GITHUB_OUTPUT
+        else
+          echo "NODE_ARCH=arm64" >> $GITHUB_OUTPUT  
+          echo "LINUX_ARCH=linux-arm64" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Download Node.js ${{ steps.vars.outputs.NODE_VERSION }}
+      run: |
+        echo "Downloading Node.js for ${{ steps.vars.outputs.LINUX_ARCH }}"
+        wget https://nodejs.org/dist/v${{ steps.vars.outputs.NODE_VERSION }}/node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }}.tar.xz
+        tar -xf node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }}.tar.xz
+        mv node-v${{ steps.vars.outputs.NODE_VERSION }}-${{ steps.vars.outputs.LINUX_ARCH }} nodejs
+        echo "Node.js extracted to nodejs/"
+        
+    - name: Install dependencies
+      run: |
+        echo "Installing backend dependencies..."
+        export PATH="$PWD/nodejs/bin:$PATH"
+        node --version
+        npm --version
+        npm install --production --no-optional
+        echo "Dependencies installed successfully"
+        
+    - name: Create bundle directory
+      run: |
+        echo "Creating bundle directory..."
+        mkdir -p karere-backend-bundle-${{ matrix.arch }}
+        cp -r nodejs karere-backend-bundle-${{ matrix.arch }}/
+        cp -r src karere-backend-bundle-${{ matrix.arch }}/
+        cp -r node_modules karere-backend-bundle-${{ matrix.arch }}/
+        cp package.json karere-backend-bundle-${{ matrix.arch }}/
+        cp package-lock.json karere-backend-bundle-${{ matrix.arch }}/
+        echo "Bundle directory created"
+        
+    - name: Create startup script
+      run: |
+        echo "Creating startup script..."
+        cat > karere-backend-bundle-${{ matrix.arch }}/start-backend.sh << 'EOF'
+        #!/bin/bash
+        # Karere Backend Startup Script
+        
+        # Get the directory where this script is located
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        
+        # Set up Node.js path
+        export PATH="$SCRIPT_DIR/nodejs/bin:$PATH"
+        
+        # Set up working directory
+        cd "$SCRIPT_DIR"
+        
+        # Start the backend
+        exec node src/backend.js "$@"
+        EOF
+        chmod +x karere-backend-bundle-${{ matrix.arch }}/start-backend.sh
+        echo "Startup script created"
+        
+    - name: Create README
+      run: |
+        echo "Creating README..."
+        cat > karere-backend-bundle-${{ matrix.arch }}/README.md << 'EOF'
+        # Karere Backend Bundle
+        
+        This bundle contains everything needed to run the Karere backend:
+        - Node.js 24.2.0
+        - Karere backend source code  
+        - All required dependencies
+        
+        ## Usage
+        
+        ```bash
+        # Make the startup script executable (if needed)
+        chmod +x start-backend.sh
+        
+        # Run the backend
+        ./start-backend.sh
+        ```
+        
+        The backend will start on port 8765 by default.
+        
+        ## Architecture
+        
+        This bundle is built for: ${{ matrix.arch }}
+        EOF
+        echo "README created"
+        
+    - name: Create zip archive
+      run: |
+        echo "Creating zip archive..."
+        zip -r karere-backend-bundle-${{ matrix.arch }}.zip karere-backend-bundle-${{ matrix.arch }}/
+        ls -lh karere-backend-bundle-${{ matrix.arch }}.zip
+        echo "Zip archive created"
+        
+    - name: Calculate checksums
+      run: |
+        echo "Calculating checksums..."
+        sha256sum karere-backend-bundle-${{ matrix.arch }}.zip > karere-backend-bundle-${{ matrix.arch }}.zip.sha256
+        echo "Checksum for ${{ matrix.arch }}:"
+        cat karere-backend-bundle-${{ matrix.arch }}.zip.sha256
+        
+    - name: Upload Release Assets
+      uses: softprops/action-gh-release@v1
       with:
-        files: release/*
-        draft: false
-        prerelease: false
-        generate_release_notes: true
+        files: |
+          karere-backend-bundle-${{ matrix.arch }}.zip
+          karere-backend-bundle-${{ matrix.arch }}.zip.sha256
         body: |
           ## Karere Backend Release
-
-          This release includes pre-built Linux binaries for multiple architectures:
+          
+          This release includes bundled packages for multiple architectures:
           - Linux x64 (Intel/AMD 64-bit)
           - Linux ARM64 (ARM 64-bit)
-
-          Download the appropriate binary for your system and make it executable:
+          
+          Each bundle contains:
+          - Node.js 24.2.0 runtime
+          - Karere backend source code
+          - All required dependencies
+          
+          Download the appropriate bundle for your system and run:
           ```bash
-          chmod +x karere-backend-linux-*
-          ./karere-backend-linux-*
+          unzip karere-backend-bundle-*.zip
+          cd karere-backend-bundle-*/
+          ./start-backend.sh
           ```
-
-          These binaries are built using Node.js Single Executable Applications (SEA) and include all dependencies.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
