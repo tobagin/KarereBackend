@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'  # Triggers on version tags like v0.2.3, v1.0.0, etc.
 
+permissions:
+  contents: write  # Required to create releases
+
 jobs:
   create-vendor-archive:
     runs-on: ubuntu-latest
