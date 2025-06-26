@@ -11,7 +11,18 @@ const fs = require('fs').promises;
 
 // Import enhanced modules
 const { log, errorHandler, performance } = require('./logger.js');
-const database = require('./database.js');
+// Use fallback database when SQLite3 is not available (e.g., in Flatpak without native modules)
+let database;
+try {
+    // Try to require sqlite3 to see if it's available
+    require('sqlite3');
+    database = require('./database.js');
+    log.info('Using SQLite database');
+} catch (error) {
+    // If sqlite3 is not available, use file-based database
+    database = require('./database-fallback.js');
+    log.info('Using file-based database (SQLite3 not available)');
+}
 const serviceManager = require('./service-manager.js');
 
 const makeWASocket = baileys.default;
