@@ -4,11 +4,23 @@
 const winston = require('winston');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+// Determine the appropriate logs directory based on environment
+function getLogsDirectory() {
+    // In Flatpak, use XDG_CACHE_HOME for logs (ephemeral data)
+    if (process.env.FLATPAK_ID) {
+        return process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache', 'karere');
+    }
+
+    // For development/standalone, use local logs directory
+    return 'logs';
+}
 
 // Create logs directory if it doesn't exist
-const logsDir = 'logs';
+const logsDir = getLogsDirectory();
 if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir);
+    fs.mkdirSync(logsDir, { recursive: true });
 }
 
 // Custom format for log messages

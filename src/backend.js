@@ -11,18 +11,7 @@ const fs = require('fs').promises;
 
 // Import enhanced modules
 const { log, errorHandler, performance } = require('./logger.js');
-// Use SEA-compatible database - check if we're in a bundled environment
-let database;
-try {
-    // Try to require sqlite3 to see if we're in a normal Node.js environment
-    require('sqlite3');
-    database = require('./database.js');
-    log.info('Using SQLite database');
-} catch (error) {
-    // If sqlite3 is not available, we're likely in SEA, use file-based database
-    database = require('./database-sea.js');
-    log.info('Using file-based database (SEA mode)');
-}
+const database = require('./database.js');
 const serviceManager = require('./service-manager.js');
 
 const makeWASocket = baileys.default;

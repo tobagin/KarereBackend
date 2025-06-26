@@ -5,11 +5,23 @@ const sqlite3 = require('sqlite3');
 const { log, errorHandler, performance } = require('./logger.js');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+// Determine the appropriate data directory based on environment
+function getDataDirectory() {
+    // In Flatpak, use XDG_DATA_HOME for persistent data
+    if (process.env.FLATPAK_ID) {
+        return process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share', 'karere');
+    }
+
+    // For development/standalone, use local data directory
+    return 'data';
+}
 
 // Create data directory if it doesn't exist
-const dataDir = 'data';
+const dataDir = getDataDirectory();
 if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir);
+    fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const dbPath = path.join(dataDir, 'karere.db');
