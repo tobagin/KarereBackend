@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION="v0.2.5"
+VERSION="v0.2.6"
 ARCHIVE_NAME="karere-backend-node-modules-${VERSION}.tar.gz"
 
 echo "🏗️  Creating vendored dependencies archive for ${VERSION}"
