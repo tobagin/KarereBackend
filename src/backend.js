@@ -8,6 +8,8 @@ const P = require('pino');
 const { WebSocketServer } = require('ws');
 const qrcode = require('qrcode');
 const fs = require('fs').promises;
+const path = require('path');
+const os = require('os');
 
 // Import enhanced modules
 const { log, errorHandler, performance } = require('./logger.js');
@@ -37,6 +39,17 @@ const {
 const PORT = process.env.PORT || 8765;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY = 5000; // 5 seconds
+
+// Determine the appropriate auth directory based on environment
+function getAuthDirectory() {
+    // In Flatpak, use XDG_DATA_HOME for persistent auth data
+    if (process.env.FLATPAK_ID) {
+        return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share', 'karere'), 'baileys_auth_info');
+    }
+
+    // For development/standalone, use local auth directory
+    return 'baileys_auth_info';
+}
 
 // Global state
 let clientSocket = null;
@@ -584,7 +597,8 @@ async function connectToWhatsApp() {
     try {
         log.baileys('Initializing WhatsApp connection');
 
-        const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
+        const authDir = getAuthDirectory();
+        const { state, saveCreds } = await useMultiFileAuthState(authDir);
         const { version } = await fetchLatestBaileysVersion();
         log.baileys(`Using WhatsApp version ${version.join('.')}`);
 
@@ -690,7 +704,8 @@ async function handleConnectionUpdate(update) {
                 });
 
                 try {
-                    await fs.rm('baileys_auth_info', { recursive: true, force: true });
+                    const authDir = getAuthDirectory();
+                    await fs.rm(authDir, { recursive: true, force: true });
                     log.baileys('Authentication credentials deleted');
                 } catch (e) {
                     log.error('Error deleting auth credentials', e);
