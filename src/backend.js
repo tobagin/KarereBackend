@@ -678,8 +678,11 @@ async function handleConnectionUpdate(update) {
                     log.error('Error generating QR code', err);
                     return;
                 }
-                sendToFrontend('qr', { url });
-                log.baileys('QR code sent to frontend');
+                // Add a small delay to ensure WebSocket connections are established
+                setTimeout(() => {
+                    sendToFrontend('qr', { url });
+                    log.baileys('QR code sent to frontend');
+                }, 500); // 500ms delay
             });
         }
 
